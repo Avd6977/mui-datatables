@@ -1,19 +1,19 @@
-import React from 'react';
-import PropTypes from 'prop-types';
-import classNames from 'classnames';
+import { Grid, GridList, GridListTile, TextField } from '@material-ui/core';
 import Button from '@material-ui/core/Button';
-import Typography from '@material-ui/core/Typography';
+import Checkbox from '@material-ui/core/Checkbox';
 import FormControl from '@material-ui/core/FormControl';
-import FormGroup from '@material-ui/core/FormGroup';
 import FormControlLabel from '@material-ui/core/FormControlLabel';
-import InputLabel from '@material-ui/core/InputLabel';
+import FormGroup from '@material-ui/core/FormGroup';
 import Input from '@material-ui/core/Input';
+import InputLabel from '@material-ui/core/InputLabel';
+import ListItemText from '@material-ui/core/ListItemText';
 import MenuItem from '@material-ui/core/MenuItem';
 import Select from '@material-ui/core/Select';
-import Checkbox from '@material-ui/core/Checkbox';
-import ListItemText from '@material-ui/core/ListItemText';
 import { withStyles } from '@material-ui/core/styles';
-import { TextField, Grid, GridList, GridListTile } from '@material-ui/core';
+import Typography from '@material-ui/core/Typography';
+import classNames from 'classnames';
+import PropTypes from 'prop-types';
+import React from 'react';
 
 export const defaultFilterStyles = theme => ({
   root: {
@@ -137,6 +137,10 @@ class TableFilter extends React.Component {
 
   handleTextFieldChange = (event, index, column) => {
     this.props.onFilterUpdate(index, event.target.value, column, 'textField');
+  };
+
+  handleRangeChange = (value, index, column, key) => {
+    this.props.onFilterUpdate(index, value, column.name, column.filterType, key);
   };
 
   renderCheckbox(column, index) {
@@ -264,6 +268,37 @@ class TableFilter extends React.Component {
     );
   }
 
+  renderRangeField(column, index) {
+    const { classes, filterList, options } = this.props;
+    const CustomTag = column.customFilterComponent || TextField;
+    const filterType = column.filterType || options.filterType;
+
+    return (
+      <GridListTile key={index} cols={1}>
+        <div className={classes.textFieldRoot}>
+          <FormControl key={index}>
+            <div>
+              <CustomTag
+                label={`Start ${column.label}`}
+                onChange={event => this.handleRangeChange(event.target.value, index, column, 'start')}
+                value={filterList[index]['start']}
+                style={{ width: '45%', marginRight: '5%' }}
+                type={filterType === 'numberRange' ? 'number' : 'datetime-local'}
+              />
+              <CustomTag
+                label={`End ${column.label}`}
+                onChange={event => this.handleRangeChange(event.target.value, index, column, 'end')}
+                value={filterList[index]['end']}
+                style={{ width: '45%' }}
+                type={filterType === 'numberRange' ? 'number' : 'datetime-local'}
+              />
+            </div>
+          </FormControl>
+        </div>
+      </GridListTile>
+    );
+  }
+
   render() {
     const { classes, columns, options, onFilterReset } = this.props;
     const textLabels = options.textLabels.filter;
@@ -301,6 +336,8 @@ class TableFilter extends React.Component {
                 ? this.renderMultiselect(column, index)
                 : filterType === 'textField'
                 ? this.renderTextField(column, index)
+                : filterType.endsWith('Range')
+                ? this.renderRangeField(column, index)
                 : this.renderSelect(column, index);
             }
           })}

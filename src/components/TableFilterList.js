@@ -1,7 +1,7 @@
-import React from 'react';
-import PropTypes from 'prop-types';
 import Chip from '@material-ui/core/Chip';
 import { withStyles } from '@material-ui/core/styles';
+import PropTypes from 'prop-types';
+import React from 'react';
 
 const defaultFilterListStyles = {
   root: {
@@ -26,7 +26,7 @@ class TableFilterList extends React.Component {
       PropTypes.oneOfType([PropTypes.string, PropTypes.shape({ name: PropTypes.string.isRequired })]),
     ).isRequired,
     /** Callback to trigger filter update */
-    onFilterUpdate: PropTypes.func,
+    filterUpdate: PropTypes.func,
     /** Extend the style applied to components */
     classes: PropTypes.object,
   };
@@ -36,16 +36,27 @@ class TableFilterList extends React.Component {
 
     return (
       <div className={classes.root}>
-        {filterList.map((item, index) =>
-          item.map((data, colIndex) => (
+        {filterList.map((item, index) => {
+          if (item['start'] || item['end']) {
+            return (
+              <Chip
+                label={filterListRenderers[index](item)}
+                key={0}
+                onDelete={filterUpdate.bind(null, index, [], columnNames[index].name, 'numberRange')}
+                className={classes.chip}
+              />
+            );
+          }
+
+          return item.map((data, colIndex) => (
             <Chip
               label={filterListRenderers[index](data)}
               key={colIndex}
               onDelete={filterUpdate.bind(null, index, data, columnNames[index].name, 'checkbox')}
               className={classes.chip}
             />
-          )),
-        )}
+          ));
+        })}
       </div>
     );
   }

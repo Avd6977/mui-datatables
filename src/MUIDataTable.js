@@ -1,22 +1,22 @@
-import React from 'react';
-import PropTypes from 'prop-types';
 import Paper from '@material-ui/core/Paper';
+import { withStyles } from '@material-ui/core/styles';
 import MuiTable from '@material-ui/core/Table';
-import TableToolbar from './components/TableToolbar';
-import TableToolbarSelect from './components/TableToolbarSelect';
-import TableFilterList from './components/TableFilterList';
-import TableBody from './components/TableBody';
-import TableResize from './components/TableResize';
-import TableHead from './components/TableHead';
-import TableFooter from './components/TableFooter';
 import classnames from 'classnames';
 import cloneDeep from 'lodash.clonedeep';
-import merge from 'lodash.merge';
-import isEqual from 'lodash.isequal';
 import find from 'lodash.find';
+import isEqual from 'lodash.isequal';
 import isUndefined from 'lodash.isundefined';
+import merge from 'lodash.merge';
+import PropTypes from 'prop-types';
+import React from 'react';
+import TableBody from './components/TableBody';
+import TableFilterList from './components/TableFilterList';
+import TableFooter from './components/TableFooter';
+import TableHead from './components/TableHead';
+import TableResize from './components/TableResize';
+import TableToolbar from './components/TableToolbar';
+import TableToolbarSelect from './components/TableToolbarSelect';
 import textLabels from './textLabels';
-import { withStyles } from '@material-ui/core/styles';
 import { buildMap, getCollatorComparator, sortCompare } from './utils';
 
 const defaultTableStyles = {
@@ -98,10 +98,18 @@ class MUIDataTable extends React.Component {
                 logic: PropTypes.func,
               }),
             ]),
-            filterType: PropTypes.oneOf(['dropdown', 'checkbox', 'multiselect', 'textField']),
+            filterType: PropTypes.oneOf([
+              'dropdown',
+              'checkbox',
+              'multiselect',
+              'textField',
+              'numberRange',
+              'dateRange',
+            ]),
             customHeadRender: PropTypes.func,
             customBodyRender: PropTypes.func,
             customFilterListRender: PropTypes.func,
+            customFilterComponent: PropTypes.func,
           }),
         }),
       ]),
@@ -109,7 +117,7 @@ class MUIDataTable extends React.Component {
     /** Options used to describe table */
     options: PropTypes.shape({
       responsive: PropTypes.oneOf(['stacked', 'scroll']),
-      filterType: PropTypes.oneOf(['dropdown', 'checkbox', 'multiselect', 'textField']),
+      filterType: PropTypes.oneOf(['dropdown', 'checkbox', 'multiselect', 'textField', 'numberRange', 'dateRange']),
       textLabels: PropTypes.object,
       pagination: PropTypes.bool,
       expandableRows: PropTypes.bool,
@@ -149,6 +157,7 @@ class MUIDataTable extends React.Component {
         separator: PropTypes.string,
       }),
       onDownload: PropTypes.func,
+      customFilterComponent: PropTypes.func,
     }),
     /** Pass and use className to style MUIDataTable as desired */
     className: PropTypes.string,
@@ -554,17 +563,18 @@ class MUIDataTable extends React.Component {
       const filterVal = filterList[index];
       const caseSensitive = this.options.caseSensitive;
       const filterType = column.filterType || this.options.filterType;
-      if (filterVal.length) {
+      if (filterVal.length || filterType.endsWith('Range')) {
         if (column.filterOptions && column.filterOptions.logic) {
           if (column.filterOptions.logic(columnValue, filterVal)) isFiltered = true;
         } else if (filterType === 'textField' && !this.hasSearchText(columnVal, filterVal, caseSensitive)) {
-          isFiltered = true;
+          return null;
         } else if (
           filterType !== 'textField' &&
+          !filterType.endsWith('Range') &&
           Array.isArray(columnValue) === false &&
           filterVal.indexOf(columnValue) < 0
         ) {
-          isFiltered = true;
+          return null;
         } else if (filterType !== 'textField' && Array.isArray(columnValue)) {
           //true if every filterVal exists in columnVal, false otherwise
           const isFullMatch = filterVal.every(el => {
@@ -572,7 +582,26 @@ class MUIDataTable extends React.Component {
           });
           //if it is not a fullMatch, filter row out
           if (!isFullMatch) {
-            isFiltered = true;
+            return null;
+          }
+        } else if (filterType.endsWith('Range')) {
+          let parseFunction = v => v;
+          switch (filterType) {
+            case 'numberRange':
+              parseFunction = v => parseInt(v, 10);
+              break;
+            case 'dateRange':
+              parseFunction = v => new Date(v);
+              break;
+          }
+          if (filterVal['start'] && filterVal['end']) {
+            isFiltered =
+              parseFunction(columnVal) < parseFunction(filterVal['start']) ||
+              parseFunction(columnVal) > parseFunction(filterVal['end']);
+          } else if (filterVal['start']) {
+            isFiltered = parseFunction(columnVal) < parseFunction(filterVal['start']);
+          } else if (filterVal['end']) {
+            isFiltered = parseFunction(columnVal) > parseFunction(filterVal['end']);
           }
         }
       }
@@ -836,11 +865,11 @@ class MUIDataTable extends React.Component {
     );
   };
 
-  filterUpdate = (index, value, column, type) => {
+  filterUpdate = (index, value, column, type, key) => {
     this.setState(
       prevState => {
-        const filterList = cloneDeep(prevState.filterList);
-        const filterPos = filterList[index].indexOf(value);
+        const filterList = prevState.filterList;
+        let filterPos = filterList[index].indexOf(value);
 
         switch (type) {
           case 'checkbox':
@@ -848,6 +877,13 @@ class MUIDataTable extends React.Component {
             break;
           case 'multiselect':
             filterList[index] = value === '' ? [] : value;
+            break;
+          case 'numberRange':
+          case 'dateRange':
+            filterList[index][key] = value || '';
+            if (Array.isArray(value)) {
+              filterList[index] = [];
+            }
             break;
           default:
             filterList[index] = filterPos >= 0 || value === '' ? [] : [value];
@@ -863,7 +899,7 @@ class MUIDataTable extends React.Component {
       () => {
         this.setTableAction('filterChange');
         if (this.options.onFilterChange) {
-          this.options.onFilterChange(column, this.state.filterList);
+          this.options.onFilterChange(column, this.state.filterList, index);
         }
       },
     );
